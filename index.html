@@ -7,65 +7,113 @@
 <meta name="description" content="Log properties visited with a buyer and export a clean PDF summary of each house's location, price, size and nearby amenities.">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   /* ============================================================
      DESIGN PLAN
-     Color: --paper (surface), --ink (text), --ink-soft (secondary text),
-            --line (hairline/border), --accent (brass-blue action color),
-            --accent-ink (text on accent), --card (raised surface)
-     Type: --font-display (Libre Franklin, condensed signage caps for
-            headings/labels), --font-body (Source Sans 3, running text
-            and form fields), --font-mono (IBM Plex Mono, tabular figures
-            for price/size so numbers line up like a spec sheet)
-     Layout: single-column field tool — sticky masthead with the
-            "Generate Report" action always reachable, a collapsible
-            add-property form, then a running list of visit cards
+     Color: --paper/--card/--ink/--ink-soft/--line (base surfaces),
+            --accent (primary funky purple) plus four amenity hues —
+            --c-mrt (purple), --c-foodcourt (orange), --c-busstop (teal),
+            --c-others (pink) — and two bonus hues (--c-sun, --c-sky)
+            used to cycle rainbow left-borders down the property list.
+            --gradient-funk drives the masthead and the primary CTA.
+     Type: --font-display (Fredoka, chunky rounded signage for headings
+            and labels), --font-body (Nunito, friendly rounded running
+            text), --font-mono (IBM Plex Mono, tabular figures so price/
+            size still line up like a spec sheet)
+     Layout: unchanged single-column field tool — sticky gradient
+            masthead, collapsible add-property form, running list of
+            visit cards with a rotating rainbow accent
      ============================================================ */
   :root {
-    --paper: #f3f3f0;
-    --ink: #1b2024;
-    --ink-soft: #5c6269;
-    --line: #d8d8d3;
+    --paper: #faf7ff;
+    --ink: #1a1523;
+    --ink-soft: #6b6180;
+    --line: #e4dbf5;
     --card: #ffffff;
-    --accent: #1f4e8c;
-    --accent-soft: #e8edf6;
+    --accent: #7c3aed;
+    --accent-soft: #ede4ff;
     --accent-ink: #ffffff;
-    --danger: #a3372b;
-    --danger-soft: #f6e9e7;
+    --danger: #e0266d;
+    --danger-soft: #fce4ee;
     color-scheme: light;
 
-    --font-display: 'Libre Franklin', 'Arial Narrow', Arial, sans-serif;
-    --font-body: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --c-mrt: #7c3aed;
+    --c-mrt-soft: #ede4ff;
+    --c-foodcourt: #f0790d;
+    --c-foodcourt-soft: #ffead2;
+    --c-busstop: #04978a;
+    --c-busstop-soft: #d4f5f1;
+    --c-others: #d6197e;
+    --c-others-soft: #fbe0ef;
+    --c-sun: #c48a00;
+    --c-sun-soft: #fdefc9;
+    --c-sky: #1d6fe0;
+    --c-sky-soft: #dde9ff;
+
+    --gradient-funk: linear-gradient(135deg, #7c3aed 0%, #d6197e 55%, #f0790d 100%);
+
+    --font-display: 'Fredoka', 'Arial Rounded MT Bold', Arial, sans-serif;
+    --font-body: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --paper: #15181b;
-      --ink: #e9e8e4;
-      --ink-soft: #9a9fa5;
-      --line: #2c3237;
-      --card: #1d2125;
-      --accent: #6d9eed;
-      --accent-soft: #223247;
-      --accent-ink: #0d1117;
-      --danger: #e2847a;
-      --danger-soft: #3a211f;
+      --paper: #140f1f;
+      --ink: #f4efff;
+      --ink-soft: #b7abd4;
+      --line: #352a4d;
+      --card: #1e1832;
+      --accent: #b794f6;
+      --accent-soft: #392d58;
+      --accent-ink: #1a1523;
+      --danger: #ff7aad;
+      --danger-soft: #4a1f34;
       color-scheme: dark;
+
+      --c-mrt: #b794f6;
+      --c-mrt-soft: #392d58;
+      --c-foodcourt: #ffab4d;
+      --c-foodcourt-soft: #4a2e10;
+      --c-busstop: #4fe0cf;
+      --c-busstop-soft: #0f3c35;
+      --c-others: #ff7ebf;
+      --c-others-soft: #4a1e36;
+      --c-sun: #ffd84d;
+      --c-sun-soft: #473a0c;
+      --c-sky: #6fa8ff;
+      --c-sky-soft: #112a4a;
+
+      --gradient-funk: linear-gradient(135deg, #7c3aed 0%, #d6197e 55%, #f0790d 100%);
     }
   }
   :root[data-theme="dark"] {
-    --paper: #15181b;
-    --ink: #e9e8e4;
-    --ink-soft: #9a9fa5;
-    --line: #2c3237;
-    --card: #1d2125;
-    --accent: #6d9eed;
-    --accent-soft: #223247;
-    --accent-ink: #0d1117;
-    --danger: #e2847a;
-    --danger-soft: #3a211f;
+    --paper: #140f1f;
+    --ink: #f4efff;
+    --ink-soft: #b7abd4;
+    --line: #352a4d;
+    --card: #1e1832;
+    --accent: #b794f6;
+    --accent-soft: #392d58;
+    --accent-ink: #1a1523;
+    --danger: #ff7aad;
+    --danger-soft: #4a1f34;
     color-scheme: dark;
+
+    --c-mrt: #b794f6;
+    --c-mrt-soft: #392d58;
+    --c-foodcourt: #ffab4d;
+    --c-foodcourt-soft: #4a2e10;
+    --c-busstop: #4fe0cf;
+    --c-busstop-soft: #0f3c35;
+    --c-others: #ff7ebf;
+    --c-others-soft: #4a1e36;
+    --c-sun: #ffd84d;
+    --c-sun-soft: #473a0c;
+    --c-sky: #6fa8ff;
+    --c-sky-soft: #112a4a;
+
+    --gradient-funk: linear-gradient(135deg, #7c3aed 0%, #d6197e 55%, #f0790d 100%);
   }
 
   * { box-sizing: border-box; }
@@ -87,9 +135,10 @@
     position: sticky;
     top: env(safe-area-inset-top, 0px);
     z-index: 10;
-    background: var(--paper);
-    padding-block: 18px 12px;
-    border-bottom: 1px solid var(--line);
+    background: var(--gradient-funk);
+    padding-block: 20px 16px;
+    border-radius: 0 0 20px 20px;
+    box-shadow: 0 6px 18px -8px rgb(124 58 237 / 0.5);
     margin-bottom: 20px;
   }
   body::before {
@@ -98,7 +147,7 @@
     inset: 0 0 auto;
     height: env(safe-area-inset-top, 0px);
     z-index: 10;
-    background: var(--paper);
+    background: var(--accent);
   }
   .masthead-row {
     display: flex;
@@ -109,23 +158,26 @@
   }
   h1 {
     font-family: var(--font-display);
-    font-weight: 800;
+    font-weight: 700;
     letter-spacing: 0.01em;
     text-transform: uppercase;
     font-size: clamp(22px, 5vw, 28px);
+    color: #ffffff;
     margin: 0;
   }
   .tagline {
     font-size: 13px;
-    color: var(--ink-soft);
+    color: rgb(255 255 255 / 0.82);
     margin: 4px 0 0;
   }
   .count-pill {
     font-family: var(--font-mono);
     font-size: 12px;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
-    background: var(--accent-soft);
+    background: #ffffff;
     color: var(--accent);
+    border: 2px solid var(--ink);
     border-radius: 999px;
     padding: 5px 12px;
     white-space: nowrap;
@@ -142,19 +194,20 @@
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--ink-soft);
+    color: rgb(255 255 255 / 0.75);
   }
   .outing-field input {
     font-family: var(--font-body);
     font-size: 15px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid var(--line);
-    color: var(--ink);
+    border-bottom: 1px solid rgb(255 255 255 / 0.45);
+    color: #ffffff;
     padding: 4px 2px;
     min-width: 0;
   }
-  .outing-field input:focus { outline: none; border-color: var(--accent); }
+  .outing-field input::placeholder { color: rgb(255 255 255 / 0.55); }
+  .outing-field input:focus { outline: none; border-color: #ffffff; }
 
   /* ---- section label ---- */
   .section-label {
@@ -170,8 +223,8 @@
   /* ---- form card ---- */
   form#property-form {
     background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: 10px;
+    border: 2px solid var(--line);
+    border-radius: 16px;
     padding: 18px;
     margin-bottom: 28px;
   }
@@ -212,43 +265,53 @@
   }
   .field-hint { font-size: 11px; color: var(--ink-soft); }
 
-  /* ---- nearby amenities ---- */
+  /* ---- nearby amenities (each type keeps its own funky hue) ---- */
   .amenity-toggle-row { display: flex; flex-wrap: wrap; gap: 8px; }
   .toggle-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--ink-soft);
-    background: var(--paper);
-    border: 1px solid var(--line);
+    background: var(--card);
+    border: 2px solid var(--line);
     border-radius: 999px;
     padding: 7px 14px;
     cursor: pointer;
     user-select: none;
+    transition: transform 0.1s ease;
   }
+  .toggle-chip:active { transform: scale(0.96); }
   .toggle-chip input { margin: 0; accent-color: var(--accent); }
-  .toggle-chip:has(input:checked) {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
+  .toggle-chip:has(input[value="mrt"]:checked) { background: var(--c-mrt-soft); border-color: var(--c-mrt); color: var(--c-mrt); }
+  .toggle-chip:has(input[value="foodcourt"]:checked) { background: var(--c-foodcourt-soft); border-color: var(--c-foodcourt); color: var(--c-foodcourt); }
+  .toggle-chip:has(input[value="busstop"]:checked) { background: var(--c-busstop-soft); border-color: var(--c-busstop); color: var(--c-busstop); }
+  .toggle-chip:has(input[value="others"]:checked) { background: var(--c-others-soft); border-color: var(--c-others); color: var(--c-others); }
+
   #amenity-detail-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
   .amenity-row {
-    border: 1px solid var(--line);
+    border: 2px solid var(--line);
+    border-left-width: 5px;
     border-radius: 8px;
     padding: 10px 12px;
     background: var(--paper);
   }
+  .amenity-row[data-type="mrt"] { border-left-color: var(--c-mrt); }
+  .amenity-row[data-type="foodcourt"] { border-left-color: var(--c-foodcourt); }
+  .amenity-row[data-type="busstop"] { border-left-color: var(--c-busstop); }
+  .amenity-row[data-type="others"] { border-left-color: var(--c-others); }
   .amenity-row-title {
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--accent);
     margin-bottom: 8px;
   }
+  .amenity-row[data-type="mrt"] .amenity-row-title { color: var(--c-mrt); }
+  .amenity-row[data-type="foodcourt"] .amenity-row-title { color: var(--c-foodcourt); }
+  .amenity-row[data-type="busstop"] .amenity-row-title { color: var(--c-busstop); }
+  .amenity-row[data-type="others"] .amenity-row-title { color: var(--c-others); }
   .amenity-row-fields {
     display: grid;
     grid-template-columns: 1.4fr 1fr 1fr;
@@ -270,40 +333,50 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-size: 13px;
-    border-radius: 7px;
-    border: 1px solid transparent;
+    border-radius: 999px;
+    border: 2px solid var(--ink);
     padding: 11px 18px;
     cursor: pointer;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
   }
+  button:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  button:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .btn-primary { background: var(--accent); color: var(--accent-ink); }
-  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: 3px 3px 0 var(--ink); transform: none; }
   .btn-ghost {
-    background: transparent;
-    color: var(--ink-soft);
+    background: var(--card);
+    color: var(--ink);
     border-color: var(--line);
+    box-shadow: 3px 3px 0 var(--line);
   }
+  .btn-ghost:hover:not(:disabled) { box-shadow: 4px 4px 0 var(--line); }
+  .btn-ghost:active:not(:disabled) { box-shadow: 1px 1px 0 var(--line); }
+  .generate-bar .btn-primary { background: var(--gradient-funk); }
   .btn-danger-text {
     background: transparent;
     border: none;
+    box-shadow: none;
     color: var(--danger);
     font-family: var(--font-body);
     text-transform: none;
     letter-spacing: normal;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 13px;
     padding: 4px 6px;
   }
+  .btn-danger-text:hover, .btn-danger-text:active { transform: none; box-shadow: none; }
 
   /* ---- empty state ---- */
   .empty-state {
     text-align: center;
     padding: 48px 20px 56px;
-    border: 1px dashed var(--line);
-    border-radius: 12px;
+    border: 3px dashed var(--accent);
+    border-radius: 16px;
     margin-bottom: 28px;
   }
-  .empty-state svg { width: 56px; height: 56px; margin-bottom: 14px; color: var(--ink-soft); }
+  .empty-state svg { width: 56px; height: 56px; margin-bottom: 14px; color: var(--accent); }
   .empty-state h2 {
     font-family: var(--font-display);
     text-transform: uppercase;
@@ -319,15 +392,21 @@
     margin-inline: auto;
   }
 
-  /* ---- property list ---- */
+  /* ---- property list: each card cycles through the funky palette ---- */
   #property-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
   .property-card {
     background: var(--card);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--accent);
-    border-radius: 8px;
+    border: 2px solid var(--line);
+    border-left: 6px solid var(--accent);
+    border-radius: 12px;
     padding: 14px 16px;
   }
+  #property-list .property-card:nth-of-type(6n+1) { border-left-color: var(--c-mrt); }
+  #property-list .property-card:nth-of-type(6n+2) { border-left-color: var(--c-others); }
+  #property-list .property-card:nth-of-type(6n+3) { border-left-color: var(--c-foodcourt); }
+  #property-list .property-card:nth-of-type(6n+4) { border-left-color: var(--c-busstop); }
+  #property-list .property-card:nth-of-type(6n+5) { border-left-color: var(--c-sun); }
+  #property-list .property-card:nth-of-type(6n+6) { border-left-color: var(--c-sky); }
   .property-card-top {
     display: flex;
     justify-content: space-between;
@@ -342,7 +421,11 @@
   }
   .property-index {
     font-family: var(--font-mono);
-    color: var(--ink-soft);
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: 5px;
+    padding: 1px 6px;
     font-size: 12px;
     margin-right: 6px;
   }
@@ -367,10 +450,15 @@
   .amenity-tag {
     background: var(--accent-soft);
     color: var(--accent);
+    font-weight: 700;
     font-size: 12px;
     border-radius: 999px;
     padding: 3px 10px;
   }
+  .amenity-tag[data-type="mrt"] { background: var(--c-mrt-soft); color: var(--c-mrt); }
+  .amenity-tag[data-type="foodcourt"] { background: var(--c-foodcourt-soft); color: var(--c-foodcourt); }
+  .amenity-tag[data-type="busstop"] { background: var(--c-busstop-soft); color: var(--c-busstop); }
+  .amenity-tag[data-type="others"] { background: var(--c-others-soft); color: var(--c-others); }
   .property-notes {
     margin-top: 10px;
     font-size: 13px;
@@ -403,9 +491,12 @@
     transform: translateX(-50%) translateY(12px);
     background: var(--ink);
     color: var(--paper);
+    font-family: var(--font-display);
+    font-weight: 600;
     font-size: 13px;
     padding: 10px 16px;
-    border-radius: 8px;
+    border-radius: 999px;
+    border: 2px solid var(--accent);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.2s ease;
@@ -727,7 +818,7 @@
         if (a.name) bits.push(a.name);
         var meta = [a.distance, a.walkTime].filter(Boolean).join(' · ');
         if (meta) bits.push(meta);
-        return '<span class="amenity-tag">' + escapeHtml(bits.join(' — ')) + '</span>';
+        return '<span class="amenity-tag" data-type="' + a.type + '">' + escapeHtml(bits.join(' — ')) + '</span>';
       }).join('');
       return (
         '<article class="property-card" data-id="' + p.id + '">' +
