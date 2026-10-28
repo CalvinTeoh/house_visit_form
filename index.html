@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>House Visit Summary</title>
+<meta name="description" content="Log properties visited with a buyer and export a clean PDF summary of each house's location, price, size and nearby amenities.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* ============================================================
+     DESIGN PLAN
+     Color: --paper (surface), --ink (text), --ink-soft (secondary text),
+            --line (hairline/border), --accent (brass-blue action color),
+            --accent-ink (text on accent), --card (raised surface)
+     Type: --font-display (Libre Franklin, condensed signage caps for
+            headings/labels), --font-body (Source Sans 3, running text
+            and form fields), --font-mono (IBM Plex Mono, tabular figures
+            for price/size so numbers line up like a spec sheet)
+     Layout: single-column field tool — sticky masthead with the
+            "Generate Report" action always reachable, a collapsible
+            add-property form, then a running list of visit cards
+     ============================================================ */
+  :root {
+    --paper: #f3f3f0;
+    --ink: #1b2024;
+    --ink-soft: #5c6269;
+    --line: #d8d8d3;
+    --card: #ffffff;
+    --accent: #1f4e8c;
+    --accent-soft: #e8edf6;
+    --accent-ink: #ffffff;
+    --danger: #a3372b;
+    --danger-soft: #f6e9e7;
+    color-scheme: light;
+
+    --font-display: 'Libre Franklin', 'Arial Narrow', Arial, sans-serif;
+    --font-body: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #15181b;
+      --ink: #e9e8e4;
+      --ink-soft: #9a9fa5;
+      --line: #2c3237;
+      --card: #1d2125;
+      --accent: #6d9eed;
+      --accent-soft: #223247;
+      --accent-ink: #0d1117;
+      --danger: #e2847a;
+      --danger-soft: #3a211f;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #15181b;
+    --ink: #e9e8e4;
+    --ink-soft: #9a9fa5;
+    --line: #2c3237;
+    --card: #1d2125;
+    --accent: #6d9eed;
+    --accent-soft: #223247;
+    --accent-ink: #0d1117;
+    --danger: #e2847a;
+    --danger-soft: #3a211f;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  /* ---- masthead ---- */
+  header.masthead {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: var(--paper);
+    padding-block: 18px 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 20px;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: var(--paper);
+  }
+  .masthead-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    font-size: clamp(22px, 5vw, 28px);
+    margin: 0;
+  }
+  .tagline {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin: 4px 0 0;
+  }
+  .count-pill {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 5px 12px;
+    white-space: nowrap;
+  }
+
+  .outing-field {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .outing-field label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+  }
+  .outing-field input {
+    font-family: var(--font-body);
+    font-size: 15px;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+    padding: 4px 2px;
+    min-width: 0;
+  }
+  .outing-field input:focus { outline: none; border-color: var(--accent); }
+
+  /* ---- section label ---- */
+  .section-label {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-soft);
+    margin: 0 0 10px;
+  }
+
+  /* ---- form card ---- */
+  form#property-form {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 28px;
+  }
+  .field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .field-grid .span-2 { grid-column: 1 / -1; }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+  }
+  .field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+  .field input,
+  .field textarea {
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 9px 10px;
+    width: 100%;
+  }
+  .field input[type="number"] { font-family: var(--font-mono); }
+  .field textarea { resize: vertical; min-height: 56px; font-size: 14px; }
+  .field input:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .field-hint { font-size: 11px; color: var(--ink-soft); }
+
+  /* ---- nearby amenities ---- */
+  .amenity-toggle-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .toggle-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-chip input { margin: 0; accent-color: var(--accent); }
+  .toggle-chip:has(input:checked) {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  #amenity-detail-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  .amenity-row {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--paper);
+  }
+  .amenity-row-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .amenity-row-fields {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 10px;
+  }
+  .amenity-row-fields .field label { font-size: 11px; }
+  .amenity-row-fields .field input { font-size: 13px; padding: 7px 8px; }
+  #estimate-btn { margin-top: 10px; }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  button {
+    font-family: var(--font-display);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 13px;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    padding: 11px 18px;
+    cursor: pointer;
+  }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink-soft);
+    border-color: var(--line);
+  }
+  .btn-danger-text {
+    background: transparent;
+    border: none;
+    color: var(--danger);
+    font-family: var(--font-body);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 600;
+    font-size: 13px;
+    padding: 4px 6px;
+  }
+
+  /* ---- empty state ---- */
+  .empty-state {
+    text-align: center;
+    padding: 48px 20px 56px;
+    border: 1px dashed var(--line);
+    border-radius: 12px;
+    margin-bottom: 28px;
+  }
+  .empty-state svg { width: 56px; height: 56px; margin-bottom: 14px; color: var(--ink-soft); }
+  .empty-state h2 {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-size: 17px;
+    margin: 0 0 6px;
+  }
+  .empty-state p {
+    color: var(--ink-soft);
+    font-size: 14px;
+    margin: 0 0 18px;
+    max-width: 34ch;
+    margin-inline: auto;
+  }
+
+  /* ---- property list ---- */
+  #property-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+  .property-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .property-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .property-address {
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.35;
+    min-width: 0;
+  }
+  .property-index {
+    font-family: var(--font-mono);
+    color: var(--ink-soft);
+    font-size: 12px;
+    margin-right: 6px;
+  }
+  .property-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-top: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .property-stats .stat-label {
+    font-family: var(--font-body);
+    color: var(--ink-soft);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 4px;
+  }
+  .amenity-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .amenity-tag {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    border-radius: 999px;
+    padding: 3px 10px;
+  }
+  .property-notes {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+    white-space: pre-wrap;
+  }
+
+  /* ---- generate bar ---- */
+  .generate-bar {
+    position: sticky;
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    display: flex;
+    justify-content: center;
+    margin: 24px 0 8px;
+  }
+  .generate-bar button {
+    width: 100%;
+    max-width: 420px;
+    padding: 14px 20px;
+    font-size: 14px;
+    box-shadow: 0 6px 18px -6px rgb(0 0 0 / 0.35);
+  }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%) translateY(12px);
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 13px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 20;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  footer.foot {
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 12px;
+    padding: 20px 0 32px;
+  }
+
+  @media (max-width: 480px) {
+    .field-grid { grid-template-columns: 1fr; }
+    .field-grid .span-2 { grid-column: auto; }
+    .amenity-row-fields { grid-template-columns: 1fr; }
+  }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="masthead-row">
+      <div>
+        <h1>House Visit Summary</h1>
+        <p class="tagline">Log every house on the outing. One clean report at the end.</p>
+      </div>
+      <span class="count-pill" id="count-pill">0 logged</span>
+    </div>
+    <div class="outing-field">
+      <label for="outing-name">Buyer / outing (optional, for the report header)</label>
+      <input type="text" id="outing-name" placeholder="e.g. The Tan Family — Sat viewing run">
+    </div>
+  </header>
+
+  <div id="empty-state" class="empty-state">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M3 11.5 12 4l9 7.5"/>
+      <path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9"/>
+      <path d="M9.5 20v-6h5v6"/>
+    </svg>
+    <h2>No properties logged yet</h2>
+    <p>Add the first house from today's viewing to start building the buyer's summary.</p>
+    <button type="button" class="btn-primary" id="empty-add-btn">+ Add Property</button>
+  </div>
+
+  <p class="section-label" id="form-label" hidden>Add a property</p>
+  <form id="property-form" hidden>
+    <div class="field-grid">
+      <div class="field span-2">
+        <label for="f-address">Address</label>
+        <input type="text" id="f-address" placeholder="21 Jalan Kelulut, #05-12" required>
+      </div>
+      <div class="field">
+        <label for="f-price">Asking price (S$)</label>
+        <input type="number" id="f-price" inputmode="decimal" min="0" step="1000" placeholder="880000">
+      </div>
+      <div class="field">
+        <label for="f-size">Size (sqft)</label>
+        <input type="number" id="f-size" inputmode="decimal" min="0" step="1" placeholder="980">
+      </div>
+      <div class="field">
+        <label for="f-bed">Bedrooms</label>
+        <input type="number" id="f-bed" inputmode="numeric" min="0" step="1" placeholder="3">
+      </div>
+      <div class="field">
+        <label for="f-bath">Bathrooms</label>
+        <input type="number" id="f-bath" inputmode="numeric" min="0" step="1" placeholder="2">
+      </div>
+      <div class="field span-2">
+        <label>Nearby amenities</label>
+        <div class="amenity-toggle-row" id="amenity-toggles">
+          <label class="toggle-chip"><input type="checkbox" class="amenity-check" value="mrt"> MRT</label>
+          <label class="toggle-chip"><input type="checkbox" class="amenity-check" value="foodcourt"> Food Court</label>
+          <label class="toggle-chip"><input type="checkbox" class="amenity-check" value="busstop"> Bus Stop</label>
+          <label class="toggle-chip"><input type="checkbox" class="amenity-check" value="others"> Others</label>
+        </div>
+        <div id="amenity-detail-rows"></div>
+        <button type="button" class="btn-ghost" id="estimate-btn" hidden>Estimate distance &amp; walk time</button>
+        <span class="field-hint" id="estimate-hint" hidden>AI estimate based on the address — please verify before sharing with buyers.</span>
+      </div>
+      <div class="field span-2">
+        <label for="f-notes">Notes from the visit</label>
+        <textarea id="f-notes" placeholder="Buyer liked the natural light; noisy road-facing unit; seller flexible on price."></textarea>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary" id="save-property-btn">+ Add to list</button>
+    </div>
+  </form>
+
+  <section id="list-section" hidden>
+    <p class="section-label">Logged this outing</p>
+    <div id="property-list"></div>
+  </section>
+
+  <div class="generate-bar" id="generate-bar" hidden>
+    <button type="button" class="btn-primary" id="generate-btn">Generate PDF Report</button>
+  </div>
+
+  <footer class="foot">Nothing here is saved — export the PDF before you close this tab.</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /** @typedef {{type:'mrt'|'foodcourt'|'busstop'|'others', label:string, name:string, distance:string, walkTime:string}} Amenity */
+  /** @type {Array<{id:number,address:string,price:string,size:string,bed:string,bath:string,amenities:Amenity[],notes:string}>} */
+  var properties = [];
+  var nextId = 1;
+
+  var AMENITY_LABELS = { mrt: 'MRT', foodcourt: 'Food Court', busstop: 'Bus Stop', others: 'Others' };
+  var AMENITY_PLACEHOLDERS = {
+    mrt: 'e.g. Bugis MRT',
+    foodcourt: 'e.g. Golden Mile Food Centre',
+    busstop: 'e.g. Opp Blk 12',
+    others: 'Place name'
+  };
+
+  var emptyState = document.getElementById('empty-state');
+  var emptyAddBtn = document.getElementById('empty-add-btn');
+  var form = document.getElementById('property-form');
+  var formLabel = document.getElementById('form-label');
+  var listSection = document.getElementById('list-section');
+  var listEl = document.getElementById('property-list');
+  var countPill = document.getElementById('count-pill');
+  var generateBar = document.getElementById('generate-bar');
+  var generateBtn = document.getElementById('generate-btn');
+  var outingInput = document.getElementById('outing-name');
+  var toastEl = document.getElementById('toast');
+  var amenityToggles = document.getElementById('amenity-toggles');
+  var amenityDetailRows = document.getElementById('amenity-detail-rows');
+  var estimateBtn = document.getElementById('estimate-btn');
+  var estimateHint = document.getElementById('estimate-hint');
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () { toastEl.classList.remove('show'); }, 2200);
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function formatMoney(n) {
+    if (n === '' || n === null || isNaN(n)) return '—';
+    return 'S$' + Number(n).toLocaleString('en-SG');
+  }
+  function formatSize(n) {
+    if (n === '' || n === null || isNaN(n)) return '—';
+    return Number(n).toLocaleString('en-SG') + ' sqft';
+  }
+  function formatBedBath(bed, bath) {
+    var parts = [];
+    if (bed !== '' && bed !== null) parts.push(bed + ' bed');
+    if (bath !== '' && bath !== null) parts.push(bath + ' bath');
+    return parts.length ? parts.join(' · ') : '—';
+  }
+
+  function showForm() {
+    form.hidden = false;
+    formLabel.hidden = false;
+    emptyState.hidden = true;
+    document.getElementById('f-address').focus();
+  }
+
+  /* ---- nearby-amenities sub-form ---- */
+
+  function createAmenityRow(type) {
+    var label = AMENITY_LABELS[type];
+    var row = document.createElement('div');
+    row.className = 'amenity-row';
+    row.dataset.type = type;
+    var otherField = type === 'others'
+      ? '<div class="field"><label>What is it?</label><input type="text" class="am-label" placeholder="e.g. Supermarket"></div>'
+      : '';
+    row.innerHTML =
+      '<div class="amenity-row-title">' + escapeHtml(label) + '</div>' +
+      '<div class="amenity-row-fields">' +
+        otherField +
+        '<div class="field"><label>Name</label><input type="text" class="am-name" placeholder="' + escapeHtml(AMENITY_PLACEHOLDERS[type]) + '"></div>' +
+        '<div class="field"><label>Distance</label><input type="text" class="am-distance" placeholder="e.g. 350 m"></div>' +
+        '<div class="field"><label>Walk time</label><input type="text" class="am-walktime" placeholder="e.g. 5 min"></div>' +
+      '</div>';
+    return row;
+  }
+
+  function updateEstimateVisibility() {
+    var anyChecked = !!amenityDetailRows.querySelector('.amenity-row');
+    estimateBtn.hidden = !anyChecked;
+    estimateHint.hidden = !anyChecked;
+  }
+
+  amenityToggles.addEventListener('change', function (e) {
+    var cb = e.target.closest('.amenity-check');
+    if (!cb) return;
+    var type = cb.value;
+    if (cb.checked) {
+      if (!amenityDetailRows.querySelector('.amenity-row[data-type="' + type + '"]')) {
+        amenityDetailRows.appendChild(createAmenityRow(type));
+      }
+    } else {
+      var existing = amenityDetailRows.querySelector('.amenity-row[data-type="' + type + '"]');
+      if (existing) existing.remove();
+    }
+    updateEstimateVisibility();
+  });
+
+  function resetAmenitySubform() {
+    amenityDetailRows.innerHTML = '';
+    updateEstimateVisibility();
+  }
+
+  // This page runs standalone (e.g. on Vercel), outside the Claude artifact
+  // viewer, so there is no window.claude bridge here. The button stays in
+  // the UI for when this file is re-embedded as a Claude artifact; on a
+  // plain web deployment it tells the agent to fill the fields in by hand.
+  async function estimateAmenities() {
+    var address = document.getElementById('f-address').value.trim();
+    if (!address) {
+      showToast('Enter the address first');
+      document.getElementById('f-address').focus();
+      return;
+    }
+    var rows = Array.from(amenityDetailRows.querySelectorAll('.amenity-row'));
+    if (!rows.length) return;
+
+    var use = window.claude && window.claude.use;
+    if (!use) {
+      showToast('Auto-estimate needs the Claude app — enter distance & walk time manually');
+      return;
+    }
+
+    estimateBtn.disabled = true;
+    var originalLabel = estimateBtn.textContent;
+    estimateBtn.textContent = 'Estimating…';
+
+    try {
+      var sample = await window.claude.use('sample');
+      if (!sample) {
+        showToast('Auto-estimate needs the Claude app — enter distance & walk time manually');
+        return;
+      }
+      var types = rows.map(function (r) { return r.dataset.type; });
+      var descriptions = rows.map(function (r) {
+        var type = r.dataset.type;
+        if (type === 'others') {
+          var lblInput = r.querySelector('.am-label');
+          var lbl = lblInput && lblInput.value.trim();
+          return type + ': nearest ' + (lbl || 'other nearby amenity');
+        }
+        if (type === 'mrt') return type + ': nearest MRT station';
+        if (type === 'foodcourt') return type + ': nearest food court or hawker centre';
+        return type + ': nearest public bus stop';
+      });
+      var prompt =
+        'For a property in Singapore at this address: "' + address + '", estimate for each item below ' +
+        'its likely name, straight-line distance from the address, and typical walking time. ' +
+        'Items:\n' + descriptions.join('\n') + '\n\n' +
+        'Respond with ONLY compact JSON, no prose: an array in this exact order of types ' +
+        JSON.stringify(types) + ', each item shaped like ' +
+        '{"type":"mrt","name":"Bugis MRT","distance":"350 m","walkTime":"5 min"}. ' +
+        'Give your best reasonable estimate even if uncertain; never leave a field empty.';
+
+      var result = await sample(prompt, {});
+      var text = (result && result.text) || '';
+      var match = text.match(/\[[\s\S]*\]/);
+      var data = match ? JSON.parse(match[0]) : [];
+
+      data.forEach(function (entry) {
+        var row = amenityDetailRows.querySelector('.amenity-row[data-type="' + entry.type + '"]');
+        if (!row) return;
+        if (entry.name) row.querySelector('.am-name').value = entry.name;
+        if (entry.distance) row.querySelector('.am-distance').value = entry.distance;
+        if (entry.walkTime) row.querySelector('.am-walktime').value = entry.walkTime;
+      });
+      showToast('Estimated — please verify before sharing');
+    } catch (err) {
+      showToast('Could not estimate — enter manually');
+    } finally {
+      estimateBtn.disabled = false;
+      estimateBtn.textContent = originalLabel;
+    }
+  }
+
+  estimateBtn.addEventListener('click', estimateAmenities);
+
+  function render() {
+    var has = properties.length > 0;
+
+    // The empty state only shows when nothing is logged yet and the
+    // form hasn't been opened; once either is true it stays off for good.
+    if (has || !form.hidden) {
+      emptyState.hidden = true;
+      formLabel.hidden = false;
+      form.hidden = false;
+    }
+
+    listSection.hidden = !has;
+    generateBar.hidden = !has;
+    countPill.textContent = properties.length + (properties.length === 1 ? ' logged' : ' logged');
+
+    listEl.innerHTML = properties.map(function (p, i) {
+      var tags = (p.amenities || []).map(function (a) {
+        var bits = [a.label];
+        if (a.name) bits.push(a.name);
+        var meta = [a.distance, a.walkTime].filter(Boolean).join(' · ');
+        if (meta) bits.push(meta);
+        return '<span class="amenity-tag">' + escapeHtml(bits.join(' — ')) + '</span>';
+      }).join('');
+      return (
+        '<article class="property-card" data-id="' + p.id + '">' +
+          '<div class="property-card-top">' +
+            '<div class="property-address"><span class="property-index">' + String(i + 1).padStart(2, '0') + '</span>' + escapeHtml(p.address || 'Untitled property') + '</div>' +
+            '<button type="button" class="btn-danger-text" data-remove="' + p.id + '">Remove</button>' +
+          '</div>' +
+          '<div class="property-stats">' +
+            '<span><span class="stat-label">Price</span>' + formatMoney(p.price) + '</span>' +
+            '<span><span class="stat-label">Size</span>' + formatSize(p.size) + '</span>' +
+            '<span><span class="stat-label">Layout</span>' + formatBedBath(p.bed, p.bath) + '</span>' +
+          '</div>' +
+          (tags ? '<div class="amenity-tags">' + tags + '</div>' : '') +
+          (p.notes ? '<div class="property-notes">' + escapeHtml(p.notes) + '</div>' : '') +
+        '</article>'
+      );
+    }).join('');
+  }
+
+  emptyAddBtn.addEventListener('click', showForm);
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var address = document.getElementById('f-address').value.trim();
+    if (!address) {
+      document.getElementById('f-address').focus();
+      return;
+    }
+    var amenities = Array.from(amenityDetailRows.querySelectorAll('.amenity-row')).map(function (row) {
+      var type = row.dataset.type;
+      var label = type === 'others'
+        ? ((row.querySelector('.am-label').value.trim()) || 'Others')
+        : AMENITY_LABELS[type];
+      return {
+        type: type,
+        label: label,
+        name: row.querySelector('.am-name').value.trim(),
+        distance: row.querySelector('.am-distance').value.trim(),
+        walkTime: row.querySelector('.am-walktime').value.trim()
+      };
+    });
+
+    properties.push({
+      id: nextId++,
+      address: address,
+      price: document.getElementById('f-price').value,
+      size: document.getElementById('f-size').value,
+      bed: document.getElementById('f-bed').value,
+      bath: document.getElementById('f-bath').value,
+      amenities: amenities,
+      notes: document.getElementById('f-notes').value.trim()
+    });
+    form.reset();
+    resetAmenitySubform();
+    render();
+    showToast('Added to the list — ' + properties.length + ' logged');
+    document.getElementById('f-address').focus();
+  });
+
+  listEl.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-remove]');
+    if (!btn) return;
+    var id = Number(btn.getAttribute('data-remove'));
+    properties = properties.filter(function (p) { return p.id !== id; });
+    render();
+  });
+
+  function buildPdf() {
+    var jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
+    if (!jsPDFCtor) {
+      showToast('PDF library failed to load — try again');
+      return;
+    }
+
+    // ---- palette (deep brick red — professional estate-report theme) ----
+    var RED = [136, 29, 38];
+    var RED_SOFT = [247, 228, 227];
+    var INK = [27, 32, 36];
+    var INK_SOFT = [104, 110, 117];
+    var LINE = [224, 216, 215];
+    var CARD = [250, 248, 247];
+    var WHITE = [255, 255, 255];
+
+    var doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
+    var pageW = doc.internal.pageSize.getWidth();
+    var pageH = doc.internal.pageSize.getHeight();
+    var margin = 50;
+    var lineW = pageW - margin * 2;
+    var bandH = 92;
+    var footerH = 36;
+    var pageNum = 1;
+
+    var outing = outingInput.value.trim();
+    var today = new Date();
+    var dateStr = today.toLocaleDateString('en-SG', { day: 'numeric', month: 'long', year: 'numeric' });
+    var countStr = properties.length + ' ' + (properties.length === 1 ? 'property' : 'properties') + ' visited';
+
+    function setFill(c) { doc.setFillColor(c[0], c[1], c[2]); }
+    function setDraw(c) { doc.setDrawColor(c[0], c[1], c[2]); }
+    function setText(c) { doc.setTextColor(c[0], c[1], c[2]); }
+
+    function drawFooter() {
+      setDraw(LINE);
+      doc.setLineWidth(0.75);
+      doc.line(margin, pageH - footerH, pageW - margin, pageH - footerH);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      setText(INK_SOFT);
+      doc.text('House Visit Summary', margin, pageH - footerH + 16);
+      doc.text('Page ' + pageNum, pageW - margin, pageH - footerH + 16, { align: 'right' });
+    }
+
+    function drawMasthead() {
+      // full-bleed red band, with a slim darker foot-line for depth
+      setFill(RED);
+      doc.rect(0, 0, pageW, bandH, 'F');
+      setFill([108, 20, 28]);
+      doc.rect(0, bandH - 3, pageW, 3, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      setText(WHITE);
+      doc.text('House Visit Summary', margin, 40);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      setText([237, 210, 209]);
+      var subtitle = outing ? outing : 'Property viewing report';
+      doc.text(subtitle, margin, 60);
+
+      // right-aligned meta block
+      doc.setFontSize(9.5);
+      setText([237, 210, 209]);
+      doc.text(dateStr, pageW - margin, 40, { align: 'right' });
+      doc.text(countStr, pageW - margin, 54, { align: 'right' });
+
+      return bandH + 30;
+    }
+
+    function drawContinuationHeader() {
+      setFill(RED_SOFT);
+      doc.rect(0, 0, pageW, 34, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      setText(RED);
+      doc.text('HOUSE VISIT SUMMARY', margin, 22);
+      doc.setFont('helvetica', 'normal');
+      setText(INK_SOFT);
+      doc.text((outing ? outing + '  ·  ' : '') + dateStr, pageW - margin, 22, { align: 'right' });
+      return 34 + 24;
+    }
+
+    var y = drawMasthead();
+    drawFooter();
+
+    function newPage() {
+      doc.addPage();
+      pageNum++;
+      y = drawContinuationHeader();
+      drawFooter();
+    }
+
+    function ensureSpace(h) {
+      if (y + h > pageH - footerH - 10) newPage();
+    }
+
+    properties.forEach(function (p, i) {
+      // --- measure this card's content height first, as one block ---
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12.5);
+      var addrLines = doc.splitTextToSize(p.address || 'Untitled property', lineW - 100);
+
+      var nearbyTypes = (p.amenities || []).map(function (a) { return a.label; });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      var nearbyLines = nearbyTypes.length ? doc.splitTextToSize('Nearby: ' + nearbyTypes.join('  ·  '), lineW - 40) : [];
+
+      doc.setFontSize(9.5);
+      var noteLines = p.notes ? doc.splitTextToSize(p.notes, lineW - 36) : [];
+
+      var cardH = 18 /*pad top*/
+        + addrLines.length * 16
+        + 20 /* stats row */
+        + (nearbyLines.length ? nearbyLines.length * 11 + 10 : 0)
+        + (noteLines.length ? noteLines.length * 12 + 18 : 0)
+        + 16 /*pad bottom*/;
+
+      ensureSpace(cardH + 14);
+
+      var cardY = y;
+      setFill(CARD);
+      setDraw(LINE);
+      doc.setLineWidth(0.75);
+      doc.roundedRect(margin, cardY, lineW, cardH, 6, 6, 'FD');
+      // left accent bar
+      setFill(RED);
+      doc.roundedRect(margin, cardY, 4, cardH, 2, 2, 'F');
+
+      var padX = margin + 20;
+      var cy = cardY + 24;
+
+      // index chip
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      setText(INK_SOFT);
+      doc.text(String(i + 1).padStart(2, '0'), padX, cy - 15);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12.5);
+      setText(INK);
+      doc.text(addrLines, padX, cy);
+      cy += addrLines.length * 16 + 10;
+
+      // stats row, each with a small caps label
+      doc.setFontSize(8.5);
+      var stats = [
+        ['PRICE', formatMoney(p.price)],
+        ['SIZE', formatSize(p.size)],
+        ['LAYOUT', formatBedBath(p.bed, p.bath)]
+      ];
+      var colW = (lineW - 40) / 3;
+      stats.forEach(function (s, idx) {
+        var sx = padX + idx * colW;
+        doc.setFont('helvetica', 'bold');
+        setText(INK_SOFT);
+        doc.text(s[0], sx, cy);
+        doc.setFont('courier', 'normal');
+        doc.setFontSize(11);
+        setText(INK);
+        doc.text(s[1], sx, cy + 14);
+        doc.setFontSize(8.5);
+      });
+      cy += 30;
+
+      if (nearbyLines.length) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        setText(RED);
+        doc.text(nearbyLines, padX, cy);
+        cy += nearbyLines.length * 11 + 8;
+      }
+
+      if (noteLines.length) {
+        setDraw(LINE);
+        doc.setLineWidth(0.5);
+        doc.line(padX, cy - 9, margin + lineW - 20, cy - 9);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        setText(INK_SOFT);
+        doc.text('NOTES', padX, cy + 4);
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(9.5);
+        setText([70, 76, 82]);
+        doc.text(noteLines, padX, cy + 16);
+      }
+
+      y = cardY + cardH + 14;
+    });
+
+    // ---- Nearby Amenities comparison table (one column per location type) ----
+    drawAmenityTable();
+
+    setText(INK);
+
+    var fname = 'house-visit-summary-' + today.toISOString().slice(0, 10) + '.pdf';
+    return { doc: doc, filename: fname };
+
+    function drawAmenityTable() {
+      var AMENITY_TYPES = ['mrt', 'foodcourt', 'busstop', 'others'];
+
+      y += 6;
+      ensureSpace(70);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      setText(INK);
+      doc.text('Nearby Amenities', margin, y);
+      y += 14;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      setText(INK_SOFT);
+      doc.text('Distances and walking times are estimates based on the address — verify before sharing with buyers.', margin, y);
+      y += 16;
+
+      var cols = [
+        { type: 'address', header: 'Property', width: lineW * 0.28 },
+        { type: 'mrt', header: 'MRT', width: lineW * 0.18 },
+        { type: 'foodcourt', header: 'Food Court', width: lineW * 0.18 },
+        { type: 'busstop', header: 'Bus Stop', width: lineW * 0.18 },
+        { type: 'others', header: 'Others', width: lineW * 0.18 }
+      ];
+      var totalW = cols.reduce(function (s, c) { return s + c.width; }, 0);
+      cols[cols.length - 1].width += (lineW - totalW);
+
+      var xPositions = [margin];
+      cols.forEach(function (c) { xPositions.push(xPositions[xPositions.length - 1] + c.width); });
+
+      function drawHeaderRow() {
+        var rh = 24;
+        setFill(RED);
+        doc.rect(margin, y, lineW, rh, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        setText(WHITE);
+        cols.forEach(function (c, idx) {
+          doc.text(c.header, xPositions[idx] + 8, y + 15);
+        });
+        y += rh;
+      }
+
+      ensureSpace(24);
+      drawHeaderRow();
+
+      function cellLines(p, type, width) {
+        var entry = (p.amenities || []).find(function (a) { return a.type === type; });
+        if (!entry) return ['—'];
+        var lines = [];
+        if (entry.name) lines = lines.concat(doc.splitTextToSize(entry.name, width - 16));
+        var meta = [entry.distance, entry.walkTime].filter(Boolean).join(' · ');
+        lines = lines.concat(doc.splitTextToSize(meta || '—', width - 16));
+        return lines;
+      }
+
+      properties.forEach(function (p, idx) {
+        doc.setFontSize(9);
+        var addressLines = doc.splitTextToSize((idx + 1) + '. ' + (p.address || 'Untitled property'), cols[0].width - 16);
+        var cellByType = {};
+        var maxLines = addressLines.length;
+        AMENITY_TYPES.forEach(function (type) {
+          var colWidth = cols[AMENITY_TYPES.indexOf(type) + 1].width;
+          cellByType[type] = cellLines(p, type, colWidth);
+          maxLines = Math.max(maxLines, cellByType[type].length);
+        });
+
+        var rowH = maxLines * 11 + 14;
+
+        if (y + rowH > pageH - footerH - 10) {
+          newPage();
+          drawHeaderRow();
+        }
+
+        if (idx % 2 === 1) {
+          setFill(RED_SOFT);
+          doc.rect(margin, y, lineW, rowH, 'F');
+        }
+
+        setDraw(LINE);
+        doc.setLineWidth(0.5);
+        doc.rect(margin, y, lineW, rowH, 'S');
+        for (var v = 1; v < cols.length; v++) {
+          doc.line(xPositions[v], y, xPositions[v], y + rowH);
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        setText(INK);
+        doc.text(addressLines, xPositions[0] + 8, y + 13);
+
+        doc.setFont('helvetica', 'normal');
+        setText(INK);
+        AMENITY_TYPES.forEach(function (type, i2) {
+          doc.text(cellByType[type], xPositions[i2 + 1] + 8, y + 13);
+        });
+
+        y += rowH;
+      });
+
+      y += 16;
+    }
+  }
+
+  generateBtn.addEventListener('click', function () {
+    var result = buildPdf();
+    if (!result) return;
+
+    generateBtn.disabled = true;
+    var originalLabel = generateBtn.textContent;
+    generateBtn.textContent = 'Preparing…';
+
+    // Standalone deployment: use jsPDF's normal browser download.
+    // (When this file is instead embedded as a Claude artifact, it would
+    // route through the platform's sandboxed `downloads` capability —
+    // see the Claude-hosted version of this app for that path.)
+    try {
+      result.doc.save(result.filename);
+      showToast('PDF downloaded');
+    } catch (err) {
+      showToast('Could not generate the PDF — try again');
+    } finally {
+      generateBtn.disabled = false;
+      generateBtn.textContent = originalLabel;
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
